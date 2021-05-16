@@ -16,8 +16,10 @@ from awsglue.dynamicframe import DynamicFrame
 ##### FROM FILES
 tedx_dataset_path = "s3://unibg-data-2021-1059865/tedx_dataset.csv"
 
+
 ###### READ PARAMETERS
 args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+
 
 ##### START JOB CONTEXT AND JOB
 sc = SparkContext()
@@ -45,26 +47,29 @@ tedx_dataset.printSchema()
 count_items = tedx_dataset.count()
 count_items_null = tedx_dataset.filter("idx is not null").count()
 
-print(f"Number of items from RAW DATA {count_items}")
-print(f"Number of items from RAW DATA with NOT NULL KEY {count_items_null}")
+print(f"Number of items from RAW DATA: {count_items}")
+print(f"Number of items from RAW DATA with NOT NULL KEY: {count_items_null}")
+
 
 ## READ TAGS DATASET
 tags_dataset_path = "s3://unibg-data-2021-1059865/tags_dataset.csv"
 tags_dataset = spark.read.option("header","true").csv(tags_dataset_path)
 
+
 ## READ WATCH_NEXT DATASET
 watch_next_dataset_path = "s3://unibg-data-2021-1059865/watch_next_dataset.csv"
-watch_next_dataset = spark.read.option("header","true").csv(watch_next_dataset_path)
-watch_next_dataset_no_dupl = watch_next_dataset.drop_duplicates()
+watch_next_dataset_raw = spark.read.option("header","true").csv(watch_next_dataset_path)
+watch_next_dataset = watch_next_dataset_raw.drop_duplicates().where('url != "https://www.ted.com/session/new?context=ted.www%2Fwatch-later"')
 
+print(f"Number Watch_Next items (RAW): {watch_next_dataset_raw.count()}")
 print(f"Number Watch_Next items: {watch_next_dataset.count()}")
-print(f"Number Watch_Next items (NO DUPLICATES): {watch_next_dataset.count()}")
+
 
 # CREATE THE AGGREGATE MODEL, ADD TAGS AND WATCH_NEXT TO TEDX_DATASET
 tags_dataset_agg = tags_dataset.groupBy(col("idx").alias("idx_ref_tags")).agg(collect_list("tag").alias("tags"))
 tags_dataset_agg.printSchema()
 
-watch_next_dataset_agg = watch_next_dataset_no_dupl.groupBy(col("idx").alias("idx_ref_watch_next")).agg(collect_list("watch_next_idx").alias("watch_next"))
+watch_next_dataset_agg = watch_next_dataset.groupBy(col("idx").alias("idx_ref_watch_next")).agg(collect_list("watch_next_idx").alias("watch_next"))
 watch_next_dataset_agg.printSchema()
 
 tedx_dataset_agg = tedx_dataset.join(tags_dataset_agg, tedx_dataset.idx == tags_dataset_agg.idx_ref_tags, "left") \
@@ -94,7 +99,6 @@ glueContext.write_dynamic_frame.from_options(tedx_dataset_dynamic_frame, connect
 
 
 ###### Gerry ######
-
 
 ## READ TRANSCRIPT DATASET
 transcript_dataset_path = "s3://unibg-data-2021-1059865/transcript_dataset.csv"
