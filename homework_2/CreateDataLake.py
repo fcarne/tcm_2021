@@ -38,6 +38,7 @@ tedx_dataset = spark.read \
     .option("header","true") \
     .option("quote", "\"") \
     .option("escape", "\"") \
+    .option("multiline", "true") \
     .csv(tedx_dataset_path)
     
 tedx_dataset.printSchema()
@@ -56,6 +57,18 @@ tags_dataset_path = "s3://unibg-data-2021-1059865/tags_dataset.csv"
 tags_dataset = spark.read.option("header","true").csv(tags_dataset_path)
 
 
+# CREATE THE AGGREGATE MODEL, ADD TAGS TO TEDX_DATASET
+tags_dataset_agg = tags_dataset.groupBy(col("idx").alias("idx_ref_tags")).agg(collect_list("tag").alias("tags"))
+tags_dataset_agg.printSchema()
+
+tedx_dataset_agg = tedx_dataset.join(tags_dataset_agg, tedx_dataset.idx == tags_dataset_agg.idx_ref_tags, "left") \
+    .drop("idx_ref_tags") \
+    .select(col("idx").alias("_id"), col("*")) \
+    .drop("idx")
+
+tedx_dataset_agg.printSchema()
+
+
 ## READ WATCH_NEXT DATASET
 watch_next_dataset_path = "s3://unibg-data-2021-1059865/watch_next_dataset.csv"
 watch_next_dataset_raw = spark.read.option("header","true").csv(watch_next_dataset_path)
@@ -65,22 +78,14 @@ print(f"Number Watch_Next items (RAW): {watch_next_dataset_raw.count()}")
 print(f"Number Watch_Next items: {watch_next_dataset.count()}")
 
 
-# CREATE THE AGGREGATE MODEL, ADD TAGS AND WATCH_NEXT TO TEDX_DATASET
-tags_dataset_agg = tags_dataset.groupBy(col("idx").alias("idx_ref_tags")).agg(collect_list("tag").alias("tags"))
-tags_dataset_agg.printSchema()
-
+# ADD WATCH_NEXT TO AGGREGATE MODEL
 watch_next_dataset_agg = watch_next_dataset.groupBy(col("idx").alias("idx_ref_watch_next")).agg(collect_list("watch_next_idx").alias("watch_next"))
 watch_next_dataset_agg.printSchema()
 
-tedx_dataset_agg = tedx_dataset.join(tags_dataset_agg, tedx_dataset.idx == tags_dataset_agg.idx_ref_tags, "left") \
-    .join(watch_next_dataset_agg, tedx_dataset.idx == watch_next_dataset_agg.idx_ref_watch_next, "left") \
-    .drop("idx_ref_tags") \
-    .drop("idx_ref_watch_next") \
-    .select(col("idx").alias("_id"), col("*")) \
-    .drop("idx") \
-
+tedx_dataset_agg = tedx_dataset_agg.join(watch_next_dataset_agg, tedx_dataset_agg._id == watch_next_dataset_agg.idx_ref_watch_next, "left") \
+    .drop("idx_ref_watch_next")
+    
 tedx_dataset_agg.printSchema()
-
 
 mongo_uri = "mongodb://cluster-tcm-2021-shard-00-00.8qyyp.mongodb.net:27017,cluster-tcm-2021-shard-00-01.8qyyp.mongodb.net:27017,cluster-tcm-2021-shard-00-02.8qyyp.mongodb.net:27017"
 
@@ -94,7 +99,6 @@ write_mongo_options = {
     "ssl.domain_match": "false"}
 
 tedx_dataset_dynamic_frame = DynamicFrame.fromDF(tedx_dataset_agg, glueContext, "nested")
-
 glueContext.write_dynamic_frame.from_options(tedx_dataset_dynamic_frame, connection_type="mongodb", connection_options=write_mongo_options)
 
 
@@ -105,7 +109,7 @@ transcript_dataset_path = "s3://unibg-data-2021-1059865/transcript_dataset.csv"
 transcript_dataset = spark.read.option("header","true").csv(transcript_dataset_path)
 
 
-# CREATE THE AGGREGATE MODEL, ADD TAGS AND WATCH_NEXT TO TEDX_DATASET
+# ADD TRANSCRIPT TO AGGREGATE MODEL
 transcript_dataset_agg = transcript_dataset.groupBy(col('idx').alias('idx_ref_transcript')).agg(collect_list(struct("timestamp", "sentence")).alias("transcript"))
 transcript_dataset_agg.printSchema()
 
@@ -124,7 +128,7 @@ write_mongo_options_gerry = {
     "password": "admin123",
     "ssl": "true",
     "ssl.domain_match": "false"}
+    
 gerry_dataset_dynamic_frame = DynamicFrame.fromDF(gerry_dataset, glueContext, "nested")
-
 glueContext.write_dynamic_frame.from_options(gerry_dataset_dynamic_frame, connection_type="mongodb", connection_options=write_mongo_options_gerry)
 
