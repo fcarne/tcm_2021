@@ -20,7 +20,7 @@ async function request_to_api(params, transcripts_string) {
             }
         }
         
-        console.log(options)
+        console.log('Options: ' + options)
 
         try {
             const req = https.request(options, function(res) {
@@ -80,7 +80,7 @@ module.exports.async_handler = (event, context) => {
                 
                 console.log('Questions: ' + JSON.stringify(questions))
                 await quiz.findByIdAndUpdate(event.quiz_id, {status: "to_validate", questions: questions }, function() {})
-                quiz.findOne({_id: event.quiz_id}).then(el => { console.log(el) })
+
                 console.log('Done!')
             }).catch(err => quiz.findByIdAndUpdate(event.quiz_id, {status: "error", error: err}))
         }

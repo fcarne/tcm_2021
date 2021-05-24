@@ -77,7 +77,7 @@ module.exports.generate_quiz = (event, context, callback) => {
             
             lambda.invoke(lambda_params).send()
             
-            console.log("invoked")
+            console.log("Invoked")
         }).catch(err =>
             callback(null, {
                 statusCode: err.statusCode || 500,
