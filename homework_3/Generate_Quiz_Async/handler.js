@@ -27,7 +27,7 @@ async function request_to_api(params, transcripts_string) {
                 res.setEncoding('utf8');
                 console.log('Status: ' + res.statusCode);
                 if(res.statusCode != 200) {
-                    reject(res.statusCode)
+                    reject(res.statusCode + ': ' + res.statusMessage)
                 }
                 var result = ''
                 res.on('data', function(data) { result += data })
@@ -68,19 +68,19 @@ module.exports.async_handler = (event, context) => {
                 
                 console.log("Transcript: " + transcripts_string)
                 
-                let questions = await request_to_api(event.params, transcripts_string).then(result => {
+                await request_to_api(event.params, transcripts_string).then(result => {
                     var questions = result.Data
                     questions.whQuestions.questionVariations = questions.whQuestions.questionVariations.filter(variation => {
                         variation.questionList = variation.questionList.filter(question => question.Answer != 'Quillionz is unable to find the answer.')
                         return variation.questionList.length > 0
                     })
-                    return questions
-                }).catch(err => quiz.findByIdAndUpdate(event.quiz_id, { status: "error", error: err }))
+                    console.log('Questions: ' + JSON.stringify(questions))
+                    quiz.findByIdAndUpdate(event.quiz_id, {status: "to_validate", questions: questions }, function() {})
+                }, error => {
+                    quiz.findByIdAndUpdate(event.quiz_id, { status: "error", error: error })              
+                }).catch(err => quiz.findByIdAndUpdate(event.quiz_id, { status: "error", error: err }) )
                 
                 
-                console.log('Questions: ' + JSON.stringify(questions))
-                await quiz.findByIdAndUpdate(event.quiz_id, {status: "to_validate", questions: questions }, function() {})
-
                 console.log('Done!')
             }).catch(err => quiz.findByIdAndUpdate(event.quiz_id, {status: "error", error: err}))
         }
